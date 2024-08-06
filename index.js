@@ -12,6 +12,7 @@ import 'dotenv/config';
 const { Client } = postgres
 
 const SECRET_KEY = process.env.SECRET_KEY;
+const PORT = process.env.PORT;
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -231,9 +232,6 @@ app.post("/import/data", async (req, res) => {
     res.status(500).send('Database error');
   }
 })
-
-
-const PORT = 8080;
 
 app.listen(PORT, () => {
   console.log(`Server is running on port: ${PORT}`);
