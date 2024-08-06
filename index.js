@@ -23,6 +23,7 @@ const client = new Client({
   password: process.env.POSTGRES_PASSWORD,
   database: 'authdb',
   port: 5432,
+  ssl: true,
 });
 
 client.connect()
