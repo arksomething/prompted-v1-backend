@@ -140,6 +140,12 @@ app.post("/chat", async (req, res) => {
     ]
   }
 
+  const moderation = await openai.moderations.create({input: userPrompt});
+
+  if (moderation.results[0].flagged == true) {
+    return res.send("This message was blocked by the ChatGPT Moderation.");
+  };
+
   const completion = await openai.chat.completions.create({
     messages: newChatState,
     model: options.model,
@@ -154,39 +160,62 @@ app.post("/chat", async (req, res) => {
 
 app.post("/playground", async (req, res) => {
   const { systemPrompt, engineeringPrompt, userPrompt, options } = req.body;
-  
-  const engineering = await openai.chat.completions.create({
-    messages: [
-      {role: "system", content: systemPrompt}, 
-      {role: "user", content: engineeringPrompt.replace("${prompt}", userPrompt)}
-    ],
-    model: "gpt-3.5-turbo-0125",
-    frequency_penalty: options.frequency,
-    presence_penalty: options.presence,
-    response_format: options.response,
-    temperature: options.temperature,
-  });
 
-  const vanilla = await openai.chat.completions.create({
-    messages: [
-      {role: "system", content: systemPrompt}, 
-      {role: "user", content: userPrompt}
-    ],
-    model: "gpt-3.5-turbo-0125",
-    frequency_penalty: options.frequency,
-    presence_penalty: options.presence,
-    response_format: options.response,
-    temperature: options.temperature,
-  });
+  var engineeringMessage = '';
+  var vanillaMessage = '';
 
-  const vanillaMessage = vanilla.choices[0].message.content
-  const engineeringMessage = engineering.choices[0].message.content
+  const moderation = await openai.moderations.create({input: userPrompt});
+
+  if (moderation.results[0].flagged == true) {
+    vanillaMessage = "This message was blocked by the ChatGPT Moderation."
+  } else {
+    const vanilla = await openai.chat.completions.create({
+      messages: [
+        {role: "system", content: systemPrompt}, 
+        {role: "user", content: userPrompt}
+      ],
+      model: "gpt-3.5-turbo-0125",
+      frequency_penalty: options.frequency,
+      presence_penalty: options.presence,
+      response_format: options.response,
+      temperature: options.temperature,
+    });
+
+    vanillaMessage = vanilla.choices[0].message.content
+  }
+
+  const engModeration = await openai.moderations.create({input: engineeringPrompt.replace("${prompt}", userPrompt)});
+
+  if (engModeration.results[0].flagged == true) {
+    engineeringMessage = "This message was blocked by the ChatGPT Moderation."
+  } else {
+    const engineering = await openai.chat.completions.create({
+      messages: [
+        {role: "system", content: systemPrompt}, 
+        {role: "user", content: engineeringPrompt.replace("${prompt}", userPrompt)}
+      ],
+      model: "gpt-3.5-turbo-0125",
+      frequency_penalty: options.frequency,
+      presence_penalty: options.presence,
+      response_format: options.response,
+      temperature: options.temperature,
+    });
+
+    engineeringMessage = engineering.choices[0].message.content
+  }
+
   
   res.send({vanilla: vanillaMessage, engineering: engineeringMessage});
 });
 
 app.post("/testing", async (req, res) => {
   const { systemPrompt, engineeringPrompt, userPrompt, index, options} = req.body;
+
+  const moderation = await openai.moderations.create({input: userPrompt});
+
+  if (moderation.results[0].flagged == true) {
+    return res.send({index: index, content: "This message was blocked by the ChatGPT Moderation."});
+  };
 
   const completion = await openai.chat.completions.create({
     messages: [
