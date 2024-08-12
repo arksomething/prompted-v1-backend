@@ -22,7 +22,7 @@ const client = new Client({
   host: 'localhost',
   user: 'postgres',
   password: process.env.POSTGRES_PASSWORD,
-  database: 'authdb',
+  database: 'postgres',
   port: 5432,
 });
 
