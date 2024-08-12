@@ -251,7 +251,6 @@ app.post("/import/data", async (req, res) => {
     const result = await client.query("SELECT * FROM user_prompts WHERE id = $1", [req.body.id]);
     const userPrompt = result.rows[0];
 
-    console.log(userPrompt)
     res.json({
       name: userPrompt.name,
       prompts: userPrompt.prompts
