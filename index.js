@@ -41,6 +41,12 @@ const promptedPricing = {
   'gpt-4o': {input: 10.00, output: 30.00},
 }
 
+const activeSelections = {
+  'Starter': {credits: 5000000, price: 500},
+  'Standard': {credits: 12000000, price: 1000},
+  'Scale': {credits: 30000000, price: 2000},
+}
+
 function roundToSecond(num) {
   return(Math.round(num * 100) / 100)
 };
@@ -81,7 +87,7 @@ app.post('/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const defaultPrompts = '[{"id": 1, "name": "Test"}]'
     const result = await client.query('INSERT INTO users (username, password, email, credits, plan, auth, user_prompts) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id', 
-      [username, hashedPassword, email, 0, "free", "user", defaultPrompts]);
+      [username, hashedPassword, email, 500000, "free", "user", defaultPrompts]);
 
     res.status(201).send(`User registered with ID: ${result.rows[0].id}`);
 
@@ -132,7 +138,7 @@ app.get('/user', async (req, res) => {
     res.json({
       username: user.username,
       email: user.email,
-      credits: user.credits,
+      credits: roundToSecond(user.credits),
       plan: user.plan,
       auth: user.auth
     });
@@ -142,7 +148,7 @@ app.get('/user', async (req, res) => {
   }
 });
 
-async function parsePrompts(chatState, systemPrompts, userPrompt, options) {
+async function parsePrompts(chatState, systemPrompts, userPrompt, options, id) {
 
   let systemPrompt = {role: 'system', content: 'You are an intelligent assistant'}
   let finalUserPrompt = userPrompt
@@ -233,6 +239,19 @@ async function parsePrompts(chatState, systemPrompts, userPrompt, options) {
     //   roundToSecond(modelPricing[options.model].output * ((outputCharacters/4)))
     // );
 
+    // 1000000 is one dollar.
+
+    const inputCost = roundToSecond(promptedPricing[options.model].input * ((inputCharacters/4)))
+    const outputCost = roundToSecond(promptedPricing[options.model].output * ((outputCharacters/4)))
+    const totalCost = inputCost + outputCost
+
+    const creditCheck = await client.query("UPDATE users SET credits = credits - $1 WHERE id = $2 AND credits >= $1 RETURNING *", [totalCost, id]);
+    
+    if (creditCheck.rowCount === 0) {
+      // No rows were updated, meaning the user did not have enough credits
+      completionContent = "Insufficient credits, please refill your account!"
+    }
+
     return completionContent
 
   } catch (error){
@@ -242,23 +261,24 @@ async function parsePrompts(chatState, systemPrompts, userPrompt, options) {
 
 app.post("/chat", async (req, res) => {
   const { chatState, systemPrompts, userPrompt, options } = req.body;
-  res.send(await parsePrompts(chatState, systemPrompts, userPrompt, options));
+  const id = req.id; 
+  res.send(await parsePrompts(chatState, systemPrompts, userPrompt, options, id));
 
 });
 
 app.post("/playground", async (req, res) => {
   const { systemPrompts, engineeringPrompts, userPrompt, options } = req.body;
-
-  const vanillaMessage = await parsePrompts([], systemPrompts, userPrompt, options)
-  const engineeringMessage = await parsePrompts([], engineeringPrompts, userPrompt, options)
+  const id = req.id; 
+  const vanillaMessage = await parsePrompts([], systemPrompts, userPrompt, options, id)
+  const engineeringMessage = await parsePrompts([], engineeringPrompts, userPrompt, options, id)
 
   res.send({vanilla: vanillaMessage, engineering: engineeringMessage});
 });
 
 app.post("/testing", async (req, res) => {
-
   const { systemPrompts, userPrompt, index, options } = req.body;
-  res.send({index: index, content: await parsePrompts([], systemPrompts, userPrompt, options)});
+  const id = req.id;
+  res.send({index: index, content: await parsePrompts([], systemPrompts, userPrompt, options, id)});
 });
 
 app.post("/import/choices", async (req, res) => {
@@ -313,6 +333,7 @@ app.post("/import/save", async (req, res) => {
 })
 
 app.post('/create-checkout-session', async (req, res) => {
+  const { activeSelection } = req.body; 
 
   const session = await stripe.checkout.sessions.create({
     line_items: [
@@ -320,12 +341,12 @@ app.post('/create-checkout-session', async (req, res) => {
         price_data: {
           currency: 'usd',
           product_data: {
-            name: 'Credits',
+            name: activeSelections[activeSelection].credits + ' Credits',
           },
-          unit_amount: 500,
+          unit_amount: activeSelections[activeSelection].price,
           
         },
-        quantity: 500,
+        quantity: 1,
       },
     ],
     mode: 'payment',
